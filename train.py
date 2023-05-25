@@ -88,6 +88,7 @@ def main():
     features = int(opt.features)
 
     js = json.dumps({
+        "size": opt.size,
         "noise_dim": noise_dim,
         "img_channels": img_channels,
         "features": features,
