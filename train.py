@@ -26,6 +26,7 @@ parser.add_argument("--outdir", required=True, help="path to out dir")
 parser.add_argument("--batch", type=int, default=64, help="input batch size")
 parser.add_argument("--size", type=int, default=64, help="the height / width of the input image to network")
 parser.add_argument("--epochs", type=int, default=50, help="number of epochs to train for")
+parser.add_argument("--snap", type=int, default=100, help="how often the images and models are saved")
 parser.add_argument("--noise_dim", type=int, default=100, help="size of the latent z vector")
 parser.add_argument("--features", type=int, default=64, help="features of the disc and gen")
 parser.add_argument("--lr", type=float, default=0.0002, help="learning rate, default=0.0002")
@@ -88,6 +89,7 @@ def main():
     features = int(opt.features)
 
     js = json.dumps({
+        "size": opt.size,
         "noise_dim": noise_dim,
         "img_channels": img_channels,
         "features": features,
@@ -154,7 +156,7 @@ def main():
             print(f"[{epoch}/{opt.epochs}][{i}/{len(dataloader)}] D loss: {disc_error.item():.4f} | G loss:"
                   f" {gen_error.item():.4f} | D(x): {D_x:.4f} | D(G(z)): {D_G_z1:.4f} / {D_G_z2:.4f}")
 
-            if i % 100 == 0:
+            if i % opt.snap == 0:
                 vutils.save_image(real_cpu, f"{opt.outdir}/{rundir}/real_samples_init.png", normalize=True)
                 fake = gen(fixed_noise)
                 vutils.save_image(fake.detach(), f"{opt.outdir}/{rundir}/fake_samples_epoch_{epoch:04d}.png",

@@ -44,6 +44,7 @@ else:
 def main():
     with open(opt.parameters) as file:
         p = json.load(file)
+        size = p["size"]
         noise_dim = p["noise_dim"]
         img_channels = p["img_channels"]
         features = p["features"]
