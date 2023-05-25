@@ -9,6 +9,7 @@ Use `train.py` with the following parameters:
   --data {DATASET_PATH} \
   --outdir {OUT_DIR} \
   --epochs {NUM_EPOCHS} \
+  --snap {SNAP} \
   --batch {BATCH_SIZE} \
   --size {IMAGE_SIZE} \
   --noise_dim {NOISE_DIM} \
