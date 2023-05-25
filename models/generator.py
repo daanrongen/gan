@@ -2,34 +2,30 @@ import torch.nn as nn
 
 
 class Generator(nn.Module):
-    def __init__(self, channels_noise, channels_img, features_g):
+    def __init__(self, noise_dim: int, features: int, img_channels: int):
         super(Generator, self).__init__()
-        self.net = nn.Sequential(
-            # Input: N x channels_noise x 1 x 1
-            self._block(channels_noise, features_g * 16, 4, 1, 0),  # img: 4x4
-            self._block(features_g * 16, features_g * 8, 4, 2, 1),  # img: 8x8
-            self._block(features_g * 8, features_g * 4, 4, 2, 1),  # img: 16x16
-            self._block(features_g * 4, features_g * 2, 4, 2, 1),  # img: 32x32
-            nn.ConvTranspose2d(
-                features_g * 2, channels_img, kernel_size=4, stride=2, padding=1
-            ),
-            # Output: N x channels_img x 64 x 64
-            nn.Tanh(),
+        self.main = nn.Sequential(
+            # input is Z, going into a convolution
+            nn.ConvTranspose2d(noise_dim, features * 8, 4, 1, 0, bias=False),
+            nn.BatchNorm2d(features * 8),
+            nn.ReLU(True),
+            # state size. (ngf*8) x 4 x 4
+            nn.ConvTranspose2d(features * 8, features * 4, 4, 2, 1, bias=False),
+            nn.BatchNorm2d(features * 4),
+            nn.ReLU(True),
+            # state size. (ngf*4) x 8 x 8
+            nn.ConvTranspose2d(features * 4, features * 2, 4, 2, 1, bias=False),
+            nn.BatchNorm2d(features * 2),
+            nn.ReLU(True),
+            # state size. (ngf*2) x 16 x 16
+            nn.ConvTranspose2d(features * 2, features, 4, 2, 1, bias=False),
+            nn.BatchNorm2d(features),
+            nn.ReLU(True),
+            # state size. (ngf) x 32 x 32
+            nn.ConvTranspose2d(features, img_channels, 4, 2, 1, bias=False),
+            nn.Tanh()
+            # state size. (nc) x 64 x 64
         )
 
-    def _block(self, in_channels, out_channels, kernel_size, stride, padding):
-        return nn.Sequential(
-            nn.ConvTranspose2d(
-                in_channels,
-                out_channels,
-                kernel_size,
-                stride,
-                padding,
-                bias=False,
-            ),
-            # nn.BatchNorm2d(out_channels),
-            nn.ReLU(),
-        )
-
-    def forward(self, x):
-        return self.net(x)
+    def forward(self, input):
+        return self.main(input)

@@ -1,128 +1,167 @@
-import torch
-import torch.nn as nn
-import torch.optim as optim
-import torchvision
-import torchvision.transforms as transforms
-from torch.utils.data import DataLoader
-from torch.utils.tensorboard import SummaryWriter
+import argparse
+import os
+import random
 
-from dataset.loader import PaintDropDataset
+import torch
+import torch.backends.cudnn as cudnn
+import torch.nn as nn
+import torch.nn.parallel
+import torch.optim as optim
+import torch.utils.data
+import torchvision.datasets as dset
+import torchvision.transforms as transforms
+import torchvision.utils as vutils
+
 from models.discriminator import Discriminator
 from models.generator import Generator
-from models.utils import initialize_weights
-import os
-import click
+from models.utils import weights_init
+
 import datetime
+import json
 import sys
-import matplotlib.pyplot as plt
 
+parser = argparse.ArgumentParser()
+parser.add_argument("--data", required=True, help="path to training set")
+parser.add_argument("--outdir", required=True, help="path to out dir")
+parser.add_argument("--batch", type=int, default=64, help="input batch size")
+parser.add_argument("--size", type=int, default=64, help="the height / width of the input image to network")
+parser.add_argument("--epochs", type=int, default=50, help="number of epochs to train for")
+parser.add_argument("--noise_dim", type=int, default=100, help="size of the latent z vector")
+parser.add_argument("--features", type=int, default=64, help="features of the disc and gen")
+parser.add_argument("--lr", type=float, default=0.0002, help="learning rate, default=0.0002")
+parser.add_argument("--beta", type=float, default=0.5, help="beta for adam. default=0.5")
+parser.add_argument("--seed", type=int, help="manual seed")
+parser.add_argument("--gen", default="", help="path to Generator (to continue training)")
+parser.add_argument("--disc", default="", help="path to Discriminator (to continue training)")
+parser.add_argument("--cuda", action="store_true", default=False, help="enables cuda")
+parser.add_argument("--mps", action="store_true", default=False, help="enables macOS GPU training")
+opt = parser.parse_args()
+print(opt)
 
-@click.command()
-@click.option("--dir", default=None, help="Path to training set dir")
-@click.option("--out", default=None, help="Path to out dir")
-@click.option("--epochs", default=20, help="Number of epochs")
-@click.option("--size", default=128, help="Image dimensions")
-@click.option("--batch", default=128, help="Batch size")
-@click.option("--dim", default=100, help="Noise dimensions")
-def main(dir, out, epochs, size, batch, dim):
-    print(f"Training dir: {dir} \n"
-          f"Out dir: {out} \n"
-          f"Epochs: {epochs} \n"
-          f"Image size: {size} \n"
-          f"Batch size: {batch} \n"
-          f"Noise dimensions: {dim}")
+try:
+    os.makedirs(opt.outdir, exist_ok=True)
+    rundir = datetime.datetime.strftime(datetime.datetime.now(), "%Y%M%d_%H%M")
+    os.makedirs(f"{opt.outdir}/{rundir}", exist_ok=True)
+except OSError:
+    pass
 
-    # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+if opt.seed is None:
+    opt.seed = random.randint(1, 10000)
+print(f"Random seed: {opt.seed}")
+random.seed(opt.seed)
+torch.manual_seed(opt.seed)
+cudnn.benchmark = True
+
+if torch.cuda.is_available() and not opt.cuda:
+    print("WARNING: You have a CUDA device, so you should probably run with --cuda")
+
+if torch.backends.mps.is_available() and not opt.mps:
+    print("WARNING: You have mps device, to enable macOS GPU run with --mps")
+
+if opt.cuda:
+    device = torch.device("cuda:0")
+elif opt.mps and torch.backends.mps.is_available():
     device = torch.device("mps")
+else:
+    device = torch.device("cpu")
 
-    ROOT_DIR = dir
-    OUT_DIR = out
-    LEARNING_RATE = 2e-4
-    BATCH_SIZE = batch
-    IMAGE_SIZE = size
-    CHANNELS_IMG = 3
-    NOISE_DIM = dim
-    NUM_EPOCHS = epochs
-    FEATURES_DISC = 64
-    FEATURES_GEN = 64
 
-    transform = transforms.Compose(
-        [
-            transforms.Resize(IMAGE_SIZE),
+def main():
+    dataset = dset.ImageFolder(
+        root=opt.data,
+        transform=transforms.Compose([
+            transforms.Resize(opt.size),
+            transforms.CenterCrop(opt.size),
             transforms.ToTensor(),
             transforms.Normalize(
-                [0.5 for _ in range(CHANNELS_IMG)], [0.5 for _ in range(CHANNELS_IMG)]
+                (0.5, 0.5, 0.5),
+                (0.5, 0.5, 0.5)
             ),
-        ]
+        ])
     )
+    img_channels = 3
 
-    dataset = PaintDropDataset(root_dir=ROOT_DIR, transform=transform)
-    dataloader = DataLoader(dataset=dataset, batch_size=BATCH_SIZE, shuffle=True)
+    assert dataset
+    dataloader = torch.utils.data.DataLoader(dataset, batch_size=opt.batch, shuffle=True)
 
-    gen = Generator(NOISE_DIM, CHANNELS_IMG, FEATURES_GEN).to(device)
-    disc = Discriminator(CHANNELS_IMG, FEATURES_DISC).to(device)
+    noise_dim = int(opt.noise_dim)
+    features = int(opt.features)
 
-    initialize_weights(gen)
-    initialize_weights(disc)
+    js = json.dumps({
+        "noise_dim": noise_dim,
+        "img_channels": img_channels,
+        "features": features,
+    }, sort_keys=True, indent=4, separators=(',', ': '))
+    with open(f"{opt.outdir}/{rundir}/parameters.json", "w") as file:
+        file.write(js)
 
-    opt_gen = optim.Adam(gen.parameters(), lr=LEARNING_RATE, betas=(0.5, 0.999))
-    opt_disc = optim.Adam(disc.parameters(), lr=LEARNING_RATE, betas=(0.5, 0.999))
+    gen = Generator(noise_dim=noise_dim, img_channels=img_channels, features=features).to(device)
+    gen.apply(weights_init)
+    if opt.gen != "":
+        gen.load_state_dict(torch.load(opt.gen))
+    print(gen)
+
+    disc = Discriminator(img_channels=img_channels, features=features).to(device)
+    disc.apply(weights_init)
+    if opt.disc != "":
+        disc.load_state_dict(torch.load(opt.disc))
+    print(disc)
+
     criterion = nn.BCELoss()
+    fixed_noise = torch.randn(opt.batch, noise_dim, 1, 1, device=device)
+    real_label = 1
+    fake_label = 0
 
-    fixed_noise = torch.randn(32, NOISE_DIM, 1, 1).to(device)
+    # setup optimizer
+    gen_optimiser = optim.Adam(gen.parameters(), lr=opt.lr, betas=(opt.beta, 0.999))
+    disc_optimiser = optim.Adam(disc.parameters(), lr=opt.lr, betas=(opt.beta, 0.999))
 
-    dirname = datetime.datetime.strftime(datetime.datetime.now(), "%Y%d%m_%H%M")
-    os.makedirs(OUT_DIR, exist_ok=True)
-    os.makedirs(f"{OUT_DIR}/{dirname}", exist_ok=True)
-
-    writer_real = SummaryWriter(f"{OUT_DIR}/{dirname}/logs/real")
-    writer_fake = SummaryWriter(f"{OUT_DIR}/{dirname}/logs/fake")
-
-    step = 0
-
-    gen.train()
-    disc.train()
-
-    for epoch in range(NUM_EPOCHS):
-        for batch_idx, real in enumerate(dataloader):
-            real = real.to(device)
-            noise = torch.randn(BATCH_SIZE, NOISE_DIM, 1, 1).to(device)
-            fake = gen(noise)
-
-            disc_real = disc(real).reshape(-1)
-            loss_disc_real = criterion(disc_real, torch.ones_like(disc_real))
-            disc_fake = disc(fake.detach()).reshape(-1)
-            loss_disc_fake = criterion(disc_fake, torch.zeros_like(disc_fake))
-            loss_disc = (loss_disc_real + loss_disc_fake) / 2
+    for epoch in range(opt.epochs):
+        for i, data in enumerate(dataloader, 0):
+            # update Discriminator
+            # train with real
             disc.zero_grad()
-            loss_disc.backward()
-            opt_disc.step()
+            real_cpu = data[0].to(device)
 
-            output = disc(fake).reshape(-1)
-            loss_gen = criterion(output, torch.ones_like(output))
+            batch_size = real_cpu.size(0)
+            label = torch.full((batch_size,), real_label, dtype=real_cpu.dtype, device=device)
+            output = disc(real_cpu)
+
+            disc_error_real = criterion(output, label)
+            disc_error_real.backward()
+            D_x = output.mean().item()
+
+            # train with fake
+            noise = torch.randn(batch_size, noise_dim, 1, 1, device=device)
+            fake = gen(noise)
+            label.fill_(fake_label)
+            output = disc(fake.detach())
+            disc_error_fake = criterion(output, label)
+            disc_error_fake.backward()
+            D_G_z1 = output.mean().item()
+            disc_error = disc_error_real + disc_error_fake
+            disc_optimiser.step()
+
+            # update Generator
             gen.zero_grad()
-            loss_gen.backward()
-            opt_gen.step()
+            label.fill_(real_label)  # fake labels are real for generator cost
+            output = disc(fake)
+            gen_error = criterion(output, label)
+            gen_error.backward()
+            D_G_z2 = output.mean().item()
+            gen_optimiser.step()
 
-            print(
-                f"Epoch [{epoch}/{NUM_EPOCHS}] Batch {batch_idx}/{len(dataloader)} \
-                  Loss D: {loss_disc:.4f}, loss G: {loss_gen:.4f}"
-            )
+            print(f"[{epoch}/{opt.epochs}][{i}/{len(dataloader)}] D loss: {disc_error.item():.4f} | G loss:"
+                  f" {gen_error.item():.4f} | D(x): {D_x:.4f} | D(G(z)): {D_G_z1:.4f} / {D_G_z2:.4f}")
 
-            if batch_idx % BATCH_SIZE == 0:
-                with torch.no_grad():
-                    fake = gen(fixed_noise)
-                    # take out (up to) 32 examples
-                    img_grid_real = torchvision.utils.make_grid(real[:64], normalize=True)
-                    img_grid_fake = torchvision.utils.make_grid(fake[:64], normalize=True)
+            if i % 100 == 0:
+                vutils.save_image(real_cpu, f"{opt.outdir}/{rundir}/real_samples_init.png", normalize=True)
+                fake = gen(fixed_noise)
+                vutils.save_image(fake.detach(), f"{opt.outdir}/{rundir}/fake_samples_epoch_{epoch:04d}.png",
+                                  normalize=True)
 
-                    torchvision.utils.save_image(img_grid_real, f"{OUT_DIR}/{dirname}/real_init.png")
-                    torchvision.utils.save_image(img_grid_fake, f"{OUT_DIR}/{dirname}/fake_{epoch:04d}.png")
-
-                    writer_real.add_image("Real", img_grid_real, global_step=step)
-                    writer_fake.add_image("Fake", img_grid_fake, global_step=step)
-
-                step += 1
+        torch.save(gen.state_dict(), f"{opt.outdir}/{rundir}/gen_epoch_{epoch}.pth")
+        torch.save(disc.state_dict(), f"{opt.outdir}/{rundir}/disc_epoch_{epoch}.pth")
 
 
 if __name__ == "__main__":
