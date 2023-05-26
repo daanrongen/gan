@@ -6,13 +6,16 @@ import subprocess
 import torch
 import torchvision.utils as vutils
 
+from models.esrgan import RRDBNet
 from models.generator import Generator
 from utils import num_range, interpolate, seed_to_vec
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--parameters", required=True, help="path to parameters json")
-parser.add_argument("--gen", default="", help="path to Generator")
+parser.add_argument("--parameters", type=str, required=True, help="path to parameters json")
+parser.add_argument("--gen", type=str, required=True, help="path to Generator")
 parser.add_argument("--seeds", type=num_range, help="list of seeds")
+parser.add_argument("--upscale", action="store_true", default=False, help="uses esrgan to upscale output image")
+parser.add_argument("--esrgan", type=str, help="path to ESRGAN")
 parser.add_argument("--interpolate", action="store_true", default=False, help="whether to interpolate inbetween seeds")
 parser.add_argument("--frames", default=120, type=int, help="how many frames to produce")
 parser.add_argument("--fps", default=24, type=int, help="framerate for video")
@@ -37,6 +40,7 @@ else:
 
 
 def main():
+    global esrgan
     with open(opt.parameters) as file:
         p = json.load(file)
         size = p["size"]
@@ -47,6 +51,12 @@ def main():
     gen = Generator(noise_dim=noise_dim, img_channels=img_channels, features=features).to(device)
     gen.load_state_dict(torch.load(opt.gen))
     gen.eval()
+
+    if opt.esrgan:
+        esrgan = RRDBNet(3, 3, 64, 23, gc=32)
+        esrgan.load_state_dict(torch.load(opt.esrgan), strict=True)
+        esrgan.eval()
+        esrgan.to(device)
 
     if (opt.interpolate):
         print(f"Calculating frames inbetween seeds for seeds {opt.seeds}")
@@ -61,7 +71,9 @@ def main():
             gen=gen,
             zs=zs,
             frames=opt.frames,
-            outdir=f"{opt.outdir}/frames"
+            outdir=f"{opt.outdir}/frames",
+            upscale=opt.upscale,
+            esrgan=esrgan if opt.esrgan else False
         )
 
         seedstr = "_".join([str(seed) for seed in opt.seeds])
@@ -75,6 +87,10 @@ def main():
         print(f"Generating image for seed {seed} ({seed_idx} / {len(opt.seeds)})")
         z = seed_to_vec(seed, noise_dim, device)
         fake = gen(z)
+
+        if opt.upscale:
+            fake = esrgan(fake)
+
         vutils.save_image(fake.detach(), f"{opt.outdir}/{seed:06d}.png", normalize=True)
 
 

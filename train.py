@@ -92,6 +92,7 @@ def main():
         "noise_dim": noise_dim,
         "img_channels": img_channels,
         "features": features,
+        "learning_rate": opt.lr,
     }, sort_keys=True, indent=4, separators=(',', ': '))
     with open(f"{opt.outdir}/{rundir}/parameters.json", "w") as file:
         file.write(js)
