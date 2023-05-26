@@ -3,6 +3,7 @@ import datetime
 import json
 import os
 import random
+import sys
 
 import torch
 import torch.backends.cudnn as cudnn
@@ -112,7 +113,7 @@ def main():
     real_label = 1
     fake_label = 0
 
-    # setup optimizer
+    # setup optimisers
     gen_optimiser = optim.Adam(gen.parameters(), lr=opt.lr, betas=(opt.beta, 0.999))
     disc_optimiser = optim.Adam(disc.parameters(), lr=opt.lr, betas=(opt.beta, 0.999))
 
@@ -121,11 +122,10 @@ def main():
             # update Discriminator
             # train with real
             disc.zero_grad()
-            real_cpu = data[0].to(device)
-
-            batch_size = real_cpu.size(0)
-            label = torch.full((batch_size,), real_label, dtype=real_cpu.dtype, device=device)
-            output = disc(real_cpu)
+            real = data[0].to(device)
+            batch_size = real.size(0)
+            label = torch.full((batch_size,), real_label, dtype=real.dtype, device=device)
+            output = disc(real)
 
             disc_error_real = criterion(output, label)
             disc_error_real.backward()
@@ -136,6 +136,7 @@ def main():
             fake = gen(noise)
             label.fill_(fake_label)
             output = disc(fake.detach())
+
             disc_error_fake = criterion(output, label)
             disc_error_fake.backward()
             D_G_z1 = output.mean().item()
@@ -155,7 +156,7 @@ def main():
                   f" {gen_error.item():.4f} | D(x): {D_x:.4f} | D(G(z)): {D_G_z1:.4f} / {D_G_z2:.4f}")
 
             if i % opt.snap == 0:
-                vutils.save_image(real_cpu, f"{opt.outdir}/{rundir}/real_samples_init.png", normalize=True)
+                vutils.save_image(real, f"{opt.outdir}/{rundir}/real_samples_init.png", normalize=True)
                 fake = gen(fixed_noise)
                 vutils.save_image(fake.detach(), f"{opt.outdir}/{rundir}/fake_samples_epoch_{epoch:04d}.png",
                                   normalize=True)
