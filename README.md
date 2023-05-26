@@ -16,8 +16,8 @@ Use `train.py` with the following parameters:
   --lr {LEARNING_RATE} \
   --beta {BETA} \
   --seed {SEED} \
-  --gen {GEN} \  # to continue training
-  --disc {DISC} \  # to continue training
+  --gen {GEN_PATH} \  # to continue training
+  --disc {DISC_PATH} \  # to continue training
   --cuda  # or --mps on Apple Silicon      
 ```
 
