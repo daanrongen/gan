@@ -28,8 +28,22 @@ Use `generate.py` with the following parameters:
 ```bash
 python generate.py \
   --parameters {PARAMS_PATH} \
-  --gen {MODEL_PATH} \
+  --gen {GEN_PATH} \
   --seeds {SEEDS} \
   --outdir {OUT_DIR} \
+  --cuda  # or --mps on Apple Silicon
+```
+
+To create a video of an animated interpolation inbetween seeds change the parameters to:
+
+```bash
+python generate.py \
+  --parameters {PARAMS_PATH} \
+  --gen {GEN_PATH} \
+  --seeds {SEEDS} \
+  --outdir {OUT_DIR} \
+  --interpolate \
+  --fps {FPS} \
+  --frames {FRAMES} \
   --cuda  # or --mps on Apple Silicon
 ```
