@@ -1,4 +1,6 @@
 import argparse
+import datetime
+import json
 import os
 import random
 
@@ -15,10 +17,6 @@ import torchvision.utils as vutils
 from models.discriminator import Discriminator
 from models.generator import Generator
 from models.utils import weights_init
-
-import datetime
-import json
-import sys
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--data", required=True, help="path to training set")

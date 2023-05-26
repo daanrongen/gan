@@ -16,8 +16,8 @@ Use `train.py` with the following parameters:
   --lr {LEARNING_RATE} \
   --beta {BETA} \
   --seed {SEED} \
-  --gen {GEN} \  # to continue training
-  --disc {DISC} \  # to continue training
+  --gen {GEN_PATH} \  # to continue training
+  --disc {DISC_PATH} \  # to continue training
   --cuda  # or --mps on Apple Silicon      
 ```
 
@@ -28,8 +28,22 @@ Use `generate.py` with the following parameters:
 ```bash
 python generate.py \
   --parameters {PARAMS_PATH} \
-  --gen {MODEL_PATH} \
+  --gen {GEN_PATH} \
   --seeds {SEEDS} \
   --outdir {OUT_DIR} \
+  --cuda  # or --mps on Apple Silicon
+```
+
+To create a video of an animated interpolation inbetween seeds change the parameters to:
+
+```bash
+python generate.py \
+  --parameters {PARAMS_PATH} \
+  --gen {GEN_PATH} \
+  --seeds {SEEDS} \
+  --outdir {OUT_DIR} \
+  --interpolate \
+  --fps {FPS} \
+  --frames {FRAMES} \
   --cuda  # or --mps on Apple Silicon
 ```
