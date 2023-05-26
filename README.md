@@ -47,3 +47,32 @@ python generate.py \
   --frames {FRAMES} \
   --cuda  # or --mps on Apple Silicon
 ```
+
+To automatically apply ESRGAN upscaling add:
+
+```bash
+python generate.py \
+  --parameters {PARAMS_PATH} \
+  --gen {GEN_PATH} \
+  --seeds {SEEDS} \
+  --outdir {OUT_DIR} \
+  --upscale \
+  --esrgan {ESRGAN_PATH} \
+  --cuda  # or --mps on Apple Silicon
+```
+
+Combine both the animation and upscaling params to create high-res video:
+
+```bash
+python generate.py \
+  --parameters {PARAMS_PATH} \
+  --gen {GEN_PATH} \
+  --seeds {SEEDS} \
+  --outdir {OUT_DIR} \
+  --upscale \
+  --esrgan {ESRGAN_PATH} \
+  --interpolate \
+  --fps {FPS} \
+  --frames {FRAMES} \
+  --cuda  # or --mps on Apple Silicon
+```

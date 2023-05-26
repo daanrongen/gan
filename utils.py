@@ -19,16 +19,19 @@ def line_interpolate(zs: list[torch.Tensor], steps: int) -> list[torch.Tensor]:
     return out
 
 
-def images(gen: torch.nn.Module, zs: list[torch.Tensor], outdir: str):
+def images(gen: torch.nn.Module, zs: list[torch.Tensor], outdir: str, upscale: bool, esrgan: torch.nn.Module):
     for z_idx, z in enumerate(zs):
         print(f"Generating image for frame {z_idx}/{len(zs)}")
-        img = gen(z)
-        vutils.save_image(img.detach(), f"{outdir}/frame_{z_idx:04d}.png", normalize=True)
+        fake = gen(z)
+        if upscale:
+            fake = esrgan(fake)
+        vutils.save_image(fake.detach(), f"{outdir}/frame_{z_idx:04d}.png", normalize=True)
 
 
-def interpolate(gen: torch.nn.Module, zs: list[torch.Tensor], frames: int, outdir: str):
+def interpolate(gen: torch.nn.Module, zs: list[torch.Tensor], frames: int, outdir: str, upscale: bool,
+                esrgan: torch.nn.Module):
     points = line_interpolate(zs, frames)
-    images(gen=gen, zs=points, outdir=outdir)
+    images(gen=gen, zs=points, outdir=outdir, upscale=upscale, esrgan=esrgan)
 
 
 def num_range(s: str) -> list[int]:
