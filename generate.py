@@ -1,26 +1,21 @@
 import argparse
 import json
-import re
+import os
+import subprocess
 
 import torch
 import torchvision.utils as vutils
 
 from models.generator import Generator
-
-
-def num_range(s: str) -> list[int]:
-    range_re = re.compile(r'^(\d+)-(\d+)$')
-    m = range_re.match(s)
-    if m:
-        return list(range(int(m.group(1)), int(m.group(2)) + 1))
-    vals = s.split(',')
-    return [int(x) for x in vals]
-
+from utils import num_range, interpolate, seed_to_vec
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--parameters", required=True, help="path to parameters json")
 parser.add_argument("--gen", default="", help="path to Generator")
 parser.add_argument("--seeds", type=num_range, help="list of seeds")
+parser.add_argument("--interpolate", action="store_true", default=False, help="whether to interpolate inbetween seeds")
+parser.add_argument("--frames", default=120, type=int, help="how many frames to produce")
+parser.add_argument("--fps", default=24, type=int, help="framerate for video")
 parser.add_argument("--outdir", required=True, help="path to out dir")
 parser.add_argument("--cuda", action="store_true", default=False, help="enables cuda")
 parser.add_argument("--mps", action="store_true", default=False, help="enables macOS GPU training")
@@ -53,15 +48,34 @@ def main():
     gen.load_state_dict(torch.load(opt.gen))
     gen.eval()
 
+    if (opt.interpolate):
+        print(f"Calculating frames inbetween seeds for seeds {opt.seeds}")
+        os.makedirs(f"{opt.outdir}/frames", exist_ok=True)
+
+        zs = []
+        for seed_idx, seed in enumerate(opt.seeds):
+            z = seed_to_vec(seed, noise_dim, device)
+            zs.append(z)
+
+        interpolate(
+            gen=gen,
+            zs=zs,
+            frames=opt.frames,
+            outdir=f"{opt.outdir}/frames"
+        )
+
+        seedstr = "_".join([str(seed) for seed in opt.seeds])
+        vidname = f"interpolation_seeds_{seedstr}_{opt.fps}fps"
+        cmd = f"ffmpeg -y -r {opt.fps} -i {opt.outdir}/frames/frame_%04d.png" \
+              f" -vcodec libx264 -pix_fmt yuv420p " \
+              f"{opt.outdir}/{vidname}.mp4"
+        subprocess.call(cmd, shell=True)
+
     for seed_idx, seed in enumerate(opt.seeds):
         print(f"Generating image for seed {seed} ({seed_idx} / {len(opt.seeds)})")
-        torch.manual_seed(seed)
-        z = torch.randn(1, noise_dim, 1, 1, device=device)
+        z = seed_to_vec(seed, noise_dim, device)
         fake = gen(z)
         vutils.save_image(fake.detach(), f"{opt.outdir}/{seed:06d}.png", normalize=True)
-
-    if isinstance(opt.seeds, list):
-        pass
 
 
 if __name__ == "__main__":
